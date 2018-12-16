@@ -1,0 +1,74 @@
+The following answers are based on new WebPagetest test.
+
+1. DNS
+a.
+    According to the Connection View graphic, there are 10 connections contain DNS lookup.
+    Since there is no lookup for the same domain name, there is no redundant lookup.
+b.
+    --------------------------------------------------------------------------------------------------
+    Name Server Queried         |       Records Returned
+    --------------------------------------------------------------------------------------------------
+    a.root-servers.net          |       org.			172800	IN	NS	a0.org.afilias-nst.info. 
+                                |       a0.org.afilias-nst.info. 172800	IN	A	199.19.56.1
+                                |       a0.org.afilias-nst.info. 172800	IN	AAAA	2001:500:e::1     
+    --------------------------------------------------------------------------------------------------
+    a0.org.afilias-nst.info     |       code.org.		86400	IN	NS	ns-1497.awsdns-59.org.
+                                |       ns-1497.awsdns-59.org.	86400	IN	A	205.251.197.217
+    --------------------------------------------------------------------------------------------------
+    ns-1497.awsdns-59.org       |       www.code.org.		60	IN	A	34.194.200.17
+                                |       code.org.		172800	IN	NS	ns-1497.awsdns-59.org.
+    --------------------------------------------------------------------------------------------------
+c.
+    According to the Repeat View from WebPagetest, it can go to "code.org" directly.
+    In our case from 1.b., we can go to the NS "code.org" using the NS query "ns-1497.awsdns-59.org" because it is already cached.
+    --------------------------------------------------------------------------------------------------
+    Name Server Queried         |       Records Returned
+    --------------------------------------------------------------------------------------------------
+    ns-1497.awsdns-59.org       |       www.code.org.		60	IN	A	52.200.192.143
+                                |       code.org.		172800	IN	NS	ns-1497.awsdns-59.org.
+    --------------------------------------------------------------------------------------------------
+
+2. Clouds & CDNs
+a.
+    After finding all services equal to "EC2", we try to use CIDR to find possible IP match.
+    We find that all the ip from www.code.org can be matched with the corresponding list below, so www.code.org resolves to EC2 node.
+    "IP": "52.23.126.86" 	"ip_prefix": "52.20.0.0/14" 	"region": "us-east-1" 	"service": "EC2"
+    "IP": "52.205.188.91" 	"ip_prefix": "52.200.0.0/13" 	"region": "us-east-1" 	"service": "EC2"
+    "IP": "52.200.192.143" 	"ip_prefix": "52.200.0.0/13" 	"region": "us-east-1" 	"service": "EC2"
+    "IP": "52.201.46.93" 	"ip_prefix": "52.200.0.0/13" 	"region": "us-east-1" 	"service": "EC2"
+    "IP": "35.174.151.18" 	"ip_prefix": "35.168.0.0/13" 	"region": "us-east-1" 	"service": "EC2"
+    "IP": "34.234.185.106" 	"ip_prefix": "34.224.0.0/12" 	"region": "us-east-1" 	"service": "EC2"
+    "IP": "34.236.13.47" 	"ip_prefix": "34.224.0.0/12" 	"region": "us-east-1" 	"service": "EC2"
+    "IP": "52.6.251.236" 	"ip_prefix": "52.4.0.0/14" 	    "region": "us-east-1" 	"service": "EC2"
+    All the nodes locate at the region "us-east-1".
+b.
+    According to the Performance Review page:
+    Akamai : cdn.optimizely.com
+    EdgeCast : can't find any domain
+c.  
+    According to the Details page:
+    --------------------------------------------------------------------------------------------------
+    Domain                         |        CDN node              |   nums of HTTP requests
+    --------------------------------------------------------------------------------------------------
+    code.org                       |       Amazon CloudFront	  |	    29
+    --------------------------------------------------------------------------------------------------
+    cdn.optimizely.com             |       Akamai	              |	    1
+    --------------------------------------------------------------------------------------------------
+    www.googletagmanager.com       |       Google           	  |	    1
+    --------------------------------------------------------------------------------------------------
+    js-agent.newrelic.com          |       Fastly	              |	    1
+    --------------------------------------------------------------------------------------------------
+    www.google-analytics.com       |       Google	              |	    2
+    --------------------------------------------------------------------------------------------------
+    www.youtube-nocookie.com       |       Google	              |	    1
+    --------------------------------------------------------------------------------------------------
+    facebook.com                   |       Facebook	              |	    1
+    --------------------------------------------------------------------------------------------------
+    twitter.com                    |       Twitter	              |	    1
+    --------------------------------------------------------------------------------------------------
+    On the Performance Review page we can't find CDN info for domain bam.nr-data.net, so we ignore it.
+    There is a connection for each node, so theses HTTP requests were issued over 8 connection.
+
+d.
+    There are 30 request with x-cache in their "Response Headers", which mean that 30 requested web objects were already stored in the CDN’s cache.
+    
