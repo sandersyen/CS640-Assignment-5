@@ -13,6 +13,7 @@ public class DNS
 	public static final short TYPE_AAAA = 28;
 	public static final short TYPE_CDN = 258;
 	public static final short TYPE_EC2 = 259;
+	public static final short TYPE_TXT = 16;
 	
 	public static final short CLASS_IN = 1;
 	
