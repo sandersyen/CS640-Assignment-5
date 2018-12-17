@@ -252,8 +252,7 @@ public class SimpleDNS
 	        }
 			
 	        for(DNSResourceRecord record : ec2Records){
-	        	if (!answers.contains(record))
-	        		answers.add(record);
+	        	answers.add(record);
 	        }
 		}
         
