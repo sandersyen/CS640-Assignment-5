@@ -37,7 +37,7 @@ public class SimpleDNS
         		ipString = args[1];
         		csvString = args[3];        		
         	}
-        	else if (args[0].equals("-r") && args[2].equals("-e")) {
+        	else if (args[0].equals("-e") && args[2].equals("-r")) {
         		ipString = args[3];
         		csvString = args[1];  
         	}
