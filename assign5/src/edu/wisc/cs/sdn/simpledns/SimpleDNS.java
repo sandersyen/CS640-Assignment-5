@@ -248,10 +248,21 @@ public class SimpleDNS
 	                }
 	            }
 	        }
-			
+			/*
 	        for(DNSResourceRecord record : ec2Records){
-	        	answers.add(record);
+	        	boolean flag = true;
+	        	for (DNSResourceRecord ansRecord : answers) {
+	        		if (ansRecord.toString().equals(record.toString())) {
+	        			flag = false;
+	        			break;
+	        		}
+	        	}
+	        	
+	        	if (flag) {
+	        		answers.add(record);
+	        	}
 	        }
+	        */
 		}
         
 		replyDNSPkt.setAuthorities(authorities);
