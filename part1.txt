@@ -70,5 +70,5 @@ c.
     There is a connection for each node, so theses HTTP requests were issued over 8 connection.
 
 d.
-    There are 30 request with x-cache in their "Response Headers", which mean that 30 requested web objects were already stored in the CDN’s cache.
+    There are 30 request with x-cache in their "Response Headers" but one of them is "Miss from cloudfront", which mean that 29 requested web objects were already stored in the CDN’s cache.
     
