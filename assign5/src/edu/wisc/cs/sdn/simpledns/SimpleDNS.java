@@ -3,6 +3,7 @@ package edu.wisc.cs.sdn.simpledns;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -23,7 +24,10 @@ public class SimpleDNS
 {
 	private static final int LISTEN_PORT = 8053;
 	private static final int SEND_PORT = 53;
+	private static final int TIMEOUT = 5000;
 	private static List<ec2Entry> ec2List = new ArrayList<ec2Entry>();
+	
+	private static final boolean DEBUG = true;
 	
     public static void main(String[] args)
 	{
@@ -64,10 +68,52 @@ public class SimpleDNS
             System.exit(-1);
         }
         
-        // read ec2 file
+        readEC2File(csvString);
+        
+        // handle packet
+        try {
+        	DatagramSocket socket = new DatagramSocket(LISTEN_PORT);
+            DatagramPacket packet = new DatagramPacket(new byte[4096], 4096);
+    		while (true) {
+    			socket.receive(packet);
+    			DNS dnsPacket = DNS.deserialize(packet.getData(), packet.getLength());
+    			if (DNS.OPCODE_STANDARD_QUERY != dnsPacket.getOpcode()) {
+    				if (DEBUG) {System.out.println("Not a query, drop this packet");}
+    				continue;
+    			}
+    			if (dnsPacket.getQuestions().isEmpty()) {
+    				if (DEBUG) {System.out.println("No question, drop this packet");}
+    				continue;
+    			}
+    			DNSQuestion question = dnsPacket.getQuestions().get(0);
+    			if (question.getType() != DNS.TYPE_A && question.getType() != DNS.TYPE_AAAA &&
+    				question.getType() != DNS.TYPE_NS && question.getType() != DNS.TYPE_CNAME) {
+    				if (DEBUG) {System.out.println("Type not match, drop this packet");}
+    				continue;
+    			}
+    			
+    			// construct&send reply packet
+    			DNS replyDNSPacket = queryResolve(question, rootServerIp, dnsPacket.isRecursionDesired(), socket);
+    			replyDNSPacket.setId(dnsPacket.getId());
+    			replyDNSPacket.setQuestions(dnsPacket.getQuestions());
+    			byte[] replyPacketSerialized = replyDNSPacket.serialize();
+    			DatagramPacket replyPacket = new DatagramPacket(replyPacketSerialized, replyPacketSerialized.length);
+    			replyPacket.setPort(packet.getPort());
+    			replyPacket.setAddress(packet.getAddress());
+    			socket.send(replyPacket);
+    		}
+        	
+        } catch (IOException e) {
+        	e.printStackTrace();
+		}
+        
+	}
+    
+    public static void readEC2File(String csv)
+    {
         BufferedReader br;
         try {
-			br = new BufferedReader(new FileReader(csvString));
+			br = new BufferedReader(new FileReader(csv));
 			while (br.ready()) {
 				String line = br.readLine();  // format: 72.44.32.0/19,Virginia
 				String[] split = line.split(",");
@@ -75,7 +121,7 @@ public class SimpleDNS
 				String[] split2 = split[0].split("/");
 				int ip = ByteBuffer.wrap(InetAddress.getByName(split2[0]).getAddress()).getInt();
 				int mask = (~0) << (32 - Integer.parseInt(split2[1]));
-				ec2List.add(new ec2Entry(ip, mask, region, split2[0]));
+				ec2List.add(new ec2Entry(ip, mask, region));
 			}
 			br.close();
 		}
@@ -83,75 +129,41 @@ public class SimpleDNS
 			System.err.println("Error: file not found");
             System.exit(-1);
 		}
-		catch (Exception e) {
+		catch (IOException e) {
 			System.err.println("Error: read fail");
             System.exit(-1);
 		}
-        
-        // handle packet
-		try {
-	        DatagramSocket socket = new DatagramSocket(LISTEN_PORT);
-	        DatagramPacket packet = new DatagramPacket(new byte[4096], 4096);
-			while (true) {
-				socket.receive(packet);
-				DNS dnsPacket = DNS.deserialize(packet.getData(), packet.getLength());
-				if (DNS.OPCODE_STANDARD_QUERY != dnsPacket.getOpcode()) {
-					return;
-				}
-				if (dnsPacket.getQuestions().isEmpty()) {
-					return;
-				}
-				DNSQuestion question = dnsPacket.getQuestions().get(0);
-				if (question.getType() != DNS.TYPE_A && question.getType() != DNS.TYPE_AAAA &&
-					question.getType() != DNS.TYPE_NS && question.getType() != DNS.TYPE_CNAME) {
-					return;
-				}
-				DNS replyDNSPacket = queryResolve(socket, question, rootServerIp, dnsPacket.isRecursionDesired());
-				replyDNSPacket.setId(dnsPacket.getId());
-				replyDNSPacket.setQuestions(dnsPacket.getQuestions());
-				byte[] replyPacketSerialized = replyDNSPacket.serialize();
-				DatagramPacket replyPacket = new DatagramPacket(replyPacketSerialized, replyPacketSerialized.length);
-				replyPacket.setPort(packet.getPort());
-				replyPacket.setAddress(packet.getAddress());
-				socket.send(replyPacket);
-			}
-		 } catch (Exception e) {
-				System.err.println(e);
-	            System.exit(-1);
-		 }
-       
-	}
+    }
     
-    private static DNS queryResolve(DatagramSocket sock, DNSQuestion query, InetAddress ip, boolean recur) throws Exception{
+    
+    private static DNS queryResolve(DNSQuestion query, InetAddress rootIP, boolean recur, DatagramSocket sock) throws IOException{
     	DNS replyDNSPkt = null;
 		DatagramPacket rcvPkt = new DatagramPacket(new byte[4096], 4096);
 		
+		// send query to root server
 		DNS dnsOutPkt = new DNS();
-		DNSQuestion question = new DNSQuestion(query.getName(), query.getType());
 		dnsOutPkt.setOpcode(DNS.OPCODE_STANDARD_QUERY);
-		dnsOutPkt.addQuestion(question);
+		dnsOutPkt.addQuestion(query);
 		dnsOutPkt.setId((short)0x00aa);
 		dnsOutPkt.setRecursionDesired(recur);
 		dnsOutPkt.setRecursionAvailable(false);
 		dnsOutPkt.setQuery(true);
 		byte[] dnsOutPktSerialized = dnsOutPkt.serialize();
 		DatagramPacket queryPkt = new DatagramPacket(dnsOutPktSerialized, dnsOutPktSerialized.length);
-		queryPkt.setAddress(ip);
+		queryPkt.setAddress(rootIP);
 		queryPkt.setPort(SEND_PORT);
 		sock.send(queryPkt);
 
 		sock.receive(rcvPkt);
 		replyDNSPkt = DNS.deserialize(rcvPkt.getData(), rcvPkt.getLength());
 
-		if(!recur){
-			return replyDNSPkt;
-		}
+		if (!recur) { return replyDNSPkt; }
 		
 		List <DNSResourceRecord> answers = new ArrayList<DNSResourceRecord>();
 		List <DNSResourceRecord> authorities = new ArrayList<DNSResourceRecord>();
 		List <DNSResourceRecord> additionals = new ArrayList<DNSResourceRecord>();
 		
-		while (replyDNSPkt.getRcode()==DNS.RCODE_NO_ERROR) {
+		while (replyDNSPkt.getRcode() == DNS.RCODE_NO_ERROR) {
 			if(replyDNSPkt.getAnswers().isEmpty()){
 				// answer not found
 				authorities = replyDNSPkt.getAuthorities();
@@ -195,7 +207,7 @@ public class SimpleDNS
 						
 						if (query.getType() == DNS.TYPE_A || query.getType() == DNS.TYPE_AAAA){
 							DNSQuestion cnameQuery = new DNSQuestion(((DNSRdataName)ansRecord.getData()).getName(), query.getType());
-							DNS resolvedDnsPkt = queryResolve(sock, cnameQuery, ip, recur);
+							DNS resolvedDnsPkt = queryResolve(cnameQuery, rootIP, recur, sock);
 							for(DNSResourceRecord resolvedRecord :resolvedDnsPkt.getAnswers()){
 								answers.add(resolvedRecord);
 							}
@@ -223,7 +235,7 @@ public class SimpleDNS
 	            		}
 	            	}
 	                if (match != null) {
-	                    DNSRdataString text = new DNSRdataString(match.region + "-" + match.ipString);
+	                    DNSRdataString text = new DNSRdataString(match.region + "-" + ipAddr.getHostAddress());
 	                    DNSResourceRecord newRecord = new DNSResourceRecord(record.getName(), DNS.TYPE_TXT, text);
 	                    ec2Records.add(newRecord);
 	                }
@@ -246,12 +258,10 @@ class ec2Entry {
 	public int ip;
 	public int mask;
 	public String region;
-	public String ipString;
 	
-	public ec2Entry(int ip, int mask, String region, String ipString) {
+	public ec2Entry(int ip, int mask, String region) {
 		this.ip = ip;
 		this.mask = mask;
 		this.region = region;
-		this.ipString = ipString;
 	}
 }
