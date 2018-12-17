@@ -11,6 +11,8 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import java.nio.ByteBuffer;
 
 import edu.wisc.cs.sdn.simpledns.packet.DNS;
@@ -222,11 +224,12 @@ public class SimpleDNS
 						}
 					}
 				}
+				break;
 			}
 		}
 		
 		// check ec2 region
-		ArrayList<DNSResourceRecord> ec2Records = new ArrayList<DNSResourceRecord>();
+		Set<DNSResourceRecord> ec2Records = new HashSet<DNSResourceRecord>();
 		if (query.getType() == DNS.TYPE_A) {
 			for (DNSResourceRecord record : answers) {
 	            if (record.getType() == DNS.TYPE_A) {
