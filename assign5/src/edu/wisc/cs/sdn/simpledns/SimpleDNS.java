@@ -248,7 +248,7 @@ public class SimpleDNS
 	                }
 	            }
 	        }
-			/*
+			
 	        for(DNSResourceRecord record : ec2Records){
 	        	boolean flag = true;
 	        	for (DNSResourceRecord ansRecord : answers) {
@@ -262,7 +262,7 @@ public class SimpleDNS
 	        		answers.add(record);
 	        	}
 	        }
-	        */
+	        
 		}
         
 		replyDNSPkt.setAuthorities(authorities);
