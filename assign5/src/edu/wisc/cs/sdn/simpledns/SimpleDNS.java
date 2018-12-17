@@ -24,7 +24,6 @@ public class SimpleDNS
 {
 	private static final int LISTEN_PORT = 8053;
 	private static final int SEND_PORT = 53;
-	private static final int TIMEOUT = 5000;
 	private static List<ec2Entry> ec2List = new ArrayList<ec2Entry>();
 	
 	private static final boolean DEBUG = true;
@@ -153,7 +152,8 @@ public class SimpleDNS
 		queryPkt.setAddress(rootIP);
 		queryPkt.setPort(SEND_PORT);
 		sock.send(queryPkt);
-
+		if (DEBUG) {System.out.println("Send packet to root server!");}
+		
 		sock.receive(rcvPkt);
 		replyDNSPkt = DNS.deserialize(rcvPkt.getData(), rcvPkt.getLength());
 
@@ -166,12 +166,18 @@ public class SimpleDNS
 		while (replyDNSPkt.getRcode() == DNS.RCODE_NO_ERROR) {
 			if(replyDNSPkt.getAnswers().isEmpty()){
 				// answer not found
+				if (DEBUG) {System.out.println("Answer not found, continue sending query");}
 				authorities = replyDNSPkt.getAuthorities();
 				additionals = replyDNSPkt.getAdditional();
 				if (replyDNSPkt.getAuthorities().isEmpty()) break;
+				short typecheck = replyDNSPkt.getAuthorities().get(0).getType();
+				if ( typecheck != DNS.TYPE_A && typecheck != DNS.TYPE_AAAA &&
+					typecheck != DNS.TYPE_NS && typecheck != DNS.TYPE_CNAME) {
+					break;
+				}
 				for (DNSResourceRecord authRecord : replyDNSPkt.getAuthorities()){
 					if (authRecord.getType() == DNS.TYPE_NS){
-						DNSRdataName authStr = (DNSRdataName)authRecord.getData();
+						DNSRdataName authStr = (DNSRdataName) authRecord.getData();
 						if (replyDNSPkt.getAdditional().isEmpty()){
 							queryPkt.setAddress(InetAddress.getByName(authStr.getName()));
 							sock.send(queryPkt);
@@ -180,7 +186,7 @@ public class SimpleDNS
 						} 
 						else {
 							for (DNSResourceRecord addRecord : replyDNSPkt.getAdditional()){
-								if (authStr.getName().contentEquals(addRecord.getName()) && addRecord.getType() == DNS.TYPE_A){
+								if (authStr.getName().contentEquals(addRecord.getName()) && (addRecord.getType() == DNS.TYPE_A || addRecord.getType() == DNS.TYPE_A)){
 									DNSRdataAddress addrData = (DNSRdataAddress)addRecord.getData();
 									queryPkt.setAddress(addrData.getAddress());
 									sock.send(queryPkt);
@@ -194,6 +200,7 @@ public class SimpleDNS
 			} 
 			else {
 				// found answer 
+				if (DEBUG) {System.out.println("Found answer!");}
 				for (DNSResourceRecord ansRecord : replyDNSPkt.getAnswers()){
 					answers.add(ansRecord);
 					if (ansRecord.getType() == DNS.TYPE_CNAME){
@@ -204,7 +211,6 @@ public class SimpleDNS
 							if (name.equals(data)) isInAnswers = true;
 						}
 						if (isInAnswers) continue;
-						
 						if (query.getType() == DNS.TYPE_A || query.getType() == DNS.TYPE_AAAA){
 							DNSQuestion cnameQuery = new DNSQuestion(((DNSRdataName)ansRecord.getData()).getName(), query.getType());
 							DNS resolvedDnsPkt = queryResolve(cnameQuery, rootIP, recur, sock);
@@ -216,10 +222,10 @@ public class SimpleDNS
 						}
 					}
 				}
-				break;
 			}
 		}
-
+		
+		// check ec2 region
 		ArrayList<DNSResourceRecord> ec2Records = new ArrayList<DNSResourceRecord>();
 		if (query.getType() == DNS.TYPE_A) {
 			for (DNSResourceRecord record : answers) {
