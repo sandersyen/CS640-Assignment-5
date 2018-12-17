@@ -215,7 +215,8 @@ public class SimpleDNS
 							DNSQuestion cnameQuery = new DNSQuestion(((DNSRdataName)ansRecord.getData()).getName(), query.getType());
 							DNS resolvedDnsPkt = queryResolve(cnameQuery, rootIP, recur, sock);
 							for(DNSResourceRecord resolvedRecord :resolvedDnsPkt.getAnswers()){
-								answers.add(resolvedRecord);
+								if (!answers.contains(resolvedRecord))
+									answers.add(resolvedRecord);
 							}
 							authorities = resolvedDnsPkt.getAuthorities();
 							additionals = resolvedDnsPkt.getAdditional();
