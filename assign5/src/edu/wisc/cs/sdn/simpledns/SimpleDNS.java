@@ -92,11 +92,19 @@ public class SimpleDNS
     			}
     			
     			// construct&send reply packet
-    			DNS replyDNSPacket = queryResolve(question, rootServerIp, dnsPacket.isRecursionDesired(), socket);
-    			replyDNSPacket.setId(dnsPacket.getId());
-    			replyDNSPacket.setQuestions(dnsPacket.getQuestions());
-    			byte[] replyPacketSerialized = replyDNSPacket.serialize();
-    			DatagramPacket replyPacket = new DatagramPacket(replyPacketSerialized, replyPacketSerialized.length);
+    			DatagramPacket replyPacket = null; 
+    			if (dnsPacket.isRecursionDesired()) {
+    				DNS replyDNSPacket = queryResolve(question, rootServerIp, socket);
+        			replyDNSPacket.setId(dnsPacket.getId());
+        			replyDNSPacket.setQuestions(dnsPacket.getQuestions());
+        			byte[] replyPacketSerialized = replyDNSPacket.serialize();
+        			replyPacket = new DatagramPacket(replyPacketSerialized, replyPacketSerialized.length);
+    			}
+    			else {
+    				replyPacket = norecurseResolve(packet, rootServerIp, socket);
+    				
+    			}
+    			
     			replyPacket.setPort(packet.getPort());
     			replyPacket.setAddress(packet.getAddress());
     			socket.send(replyPacket);
@@ -134,8 +142,19 @@ public class SimpleDNS
 		}
     }
     
+    private static DatagramPacket norecurseResolve(DatagramPacket packet, InetAddress rootIP, DatagramSocket sock) throws IOException {
+		DatagramPacket rcvPkt = new DatagramPacket(new byte[4096], 4096);
+		// send query to root server
+		DatagramPacket queryPkt = new DatagramPacket(packet.getData(), packet.getLength());
+		queryPkt.setAddress(rootIP);
+		queryPkt.setPort(SEND_PORT);
+		sock.send(queryPkt);
+		if (DEBUG) {System.out.println("Send packet to root server!");}
+		sock.receive(rcvPkt);
+		return(rcvPkt);
+    }
     
-    private static DNS queryResolve(DNSQuestion query, InetAddress rootIP, boolean recur, DatagramSocket sock) throws IOException{
+    private static DNS queryResolve(DNSQuestion query, InetAddress rootIP, DatagramSocket sock) throws IOException {
     	DNS replyDNSPkt = null;
 		DatagramPacket rcvPkt = new DatagramPacket(new byte[4096], 4096);
 		
@@ -144,7 +163,7 @@ public class SimpleDNS
 		dnsOutPkt.setOpcode(DNS.OPCODE_STANDARD_QUERY);
 		dnsOutPkt.addQuestion(query);
 		dnsOutPkt.setId((short)0x00aa);
-		dnsOutPkt.setRecursionDesired(recur);
+		dnsOutPkt.setRecursionDesired(true);
 		dnsOutPkt.setRecursionAvailable(false);
 		dnsOutPkt.setQuery(true);
 		byte[] dnsOutPktSerialized = dnsOutPkt.serialize();
@@ -156,8 +175,6 @@ public class SimpleDNS
 		
 		sock.receive(rcvPkt);
 		replyDNSPkt = DNS.deserialize(rcvPkt.getData(), rcvPkt.getLength());
-
-		if (!recur) { return replyDNSPkt; }
 		
 		List <DNSResourceRecord> answers = new ArrayList<DNSResourceRecord>();
 		List <DNSResourceRecord> authorities = new ArrayList<DNSResourceRecord>();
@@ -213,7 +230,7 @@ public class SimpleDNS
 						if (isInAnswers) continue;
 						if (query.getType() == DNS.TYPE_A || query.getType() == DNS.TYPE_AAAA){
 							DNSQuestion cnameQuery = new DNSQuestion(((DNSRdataName)ansRecord.getData()).getName(), query.getType());
-							DNS resolvedDnsPkt = queryResolve(cnameQuery, rootIP, recur, sock);
+							DNS resolvedDnsPkt = queryResolve(cnameQuery, rootIP, sock);
 							for(DNSResourceRecord resolvedRecord :resolvedDnsPkt.getAnswers()){
 								answers.add(resolvedRecord);
 							}
