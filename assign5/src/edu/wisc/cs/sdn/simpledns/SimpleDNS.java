@@ -26,7 +26,7 @@ public class SimpleDNS
 	private static final int SEND_PORT = 53;
 	private static List<ec2Entry> ec2List = new ArrayList<ec2Entry>();
 	
-	private static final boolean DEBUG = true;
+	private static final boolean DEBUG = false;
 	
     public static void main(String[] args)
 	{
