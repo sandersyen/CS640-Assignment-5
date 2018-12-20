@@ -203,7 +203,7 @@ public class SimpleDNS
 						} 
 						else {
 							for (DNSResourceRecord addRecord : replyDNSPkt.getAdditional()){
-								if (authStr.getName().contentEquals(addRecord.getName()) && (addRecord.getType() == DNS.TYPE_A || addRecord.getType() == DNS.TYPE_A)){
+								if (authStr.getName().contentEquals(addRecord.getName()) && (addRecord.getType() == DNS.TYPE_A)){
 									DNSRdataAddress addrData = (DNSRdataAddress)addRecord.getData();
 									queryPkt.setAddress(addrData.getAddress());
 									sock.send(queryPkt);
